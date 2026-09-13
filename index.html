@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Битва Старр | Новости — новости, обновления и материалы проекта.">
+  <title>Битва Старр | Новости</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- Верхняя панель сайта -->
+  <header class="topbar">
+    <div class="topbar__inner">
+      <a class="logo" href="#" aria-label="Битва Старр | Новости">
+        <img class="logo__image" src="png/logo.png" alt="">
+        <span>Битва Старр <b>| Новости</b></span>
+      </a>
+
+      <form class="search" id="searchForm" role="search">
+        <label class="sr-only" for="searchInput">Поиск по новостям</label>
+        <input
+          id="searchInput"
+          type="search"
+          placeholder="Поиск по новостям..."
+          autocomplete="off"
+          spellcheck="false"
+        >
+        <button class="search__clear" id="clearSearch" type="button" aria-label="Очистить поиск" hidden>×</button>
+      </form>
+
+      <button class="theme-toggle" id="themeToggle" type="button" aria-label="Переключить тему" title="Переключить тему">
+        <span id="themeIcon" aria-hidden="true">🌙</span>
+      </button>
+    </div>
+  </header>
+
+  <main class="main">
+    <!-- Список постов -->
+    <section id="feedView" class="view" aria-labelledby="postsHeading">
+      <div class="posts-heading">
+        <div>
+          <p class="eyebrow">Новости проекта</p>
+          <h1 id="postsHeading">Последние публикации</h1>
+        </div>
+        <p class="posts-count" id="postsCount" aria-live="polite"></p>
+      </div>
+
+      <div class="posts" id="posts" aria-live="polite"></div>
+      <div class="empty-state" id="emptyState" hidden>
+        <h2>Ничего не найдено</h2>
+        <p>Попробуйте изменить поисковый запрос или очистить фильтр.</p>
+      </div>
+    </section>
+
+    <!-- Полная страница одного поста -->
+    <section id="postView" class="view post-view" hidden aria-labelledby="detailTitle">
+      <button class="back-button" id="backButton" type="button">← Все новости</button>
+      <article class="post-detail" id="postDetail"></article>
+    </section>
+  </main>
+
+  <!-- Всплывающее уведомление копирования -->
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <footer class="footer">
+    Сайт сделал Иван Иванов · 2025 · Все права защищены
+  </footer>
+
+  <script src="script.js"></script>
+</body>
+</html>
