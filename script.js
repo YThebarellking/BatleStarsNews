@@ -517,7 +517,7 @@ function setTheme(theme, save = true) {
   elements.root.dataset.theme = theme === "dark" ? "dark" : "light";
   const dark = theme === "dark";
 
-  elements.themeIcon.textContent = dark ? "☀️" : "🌙";
+  elements.themeIcon.textContent = dark ? "🌙" : "☀️";
   elements.themeToggle.setAttribute(
     "aria-label",
     dark ? "Включить светлую тему" : "Включить тёмную тему"
