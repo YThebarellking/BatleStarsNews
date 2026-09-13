@@ -557,3 +557,15 @@ code.copyable.is-copied {
   font-size: 1.04rem;
   line-height: 1.6;
 }
+
+/* Скрываем встроенный крестик у input[type="search"] */
+.search input::-webkit-search-cancel-button,
+.search input::-webkit-search-decoration {
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+/* Для Firefox / старых браузеров */
+.search input::-moz-search-clear {
+  display: none;
+}
