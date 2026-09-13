@@ -20,7 +20,7 @@ const POSTS = [
     title: "Тест",
     description: "Шрифты",
     image: "png/example-1.png",
-    content: "Шрифты:\n\n*Курсивный*\n\n**Жирный**\n\n#Моно#\n\n \"Цитата\" \n\nТаблица\n %(столбик1/столбик2) (тест/тест)%\n\n@Открыть example.com (https://example.com)@\n\n[[img:png/example-4.png|Упоминание картинки|100]]",
+    content: "Шрифты:\n\n*Курсивный*\n\n**Жирный**\n\n#Моно#\n\n \"Цитата\" \n\nТаблица\n %(столбик1/столбик2) (тест/тест)%\n\n@Открыть example.com (https://example.com)@\n\n[[img:png/logo.png|Упоминание картинки|100]]",
     tags: ["#новости", "#обновление", "#битва"]
   },
   {
