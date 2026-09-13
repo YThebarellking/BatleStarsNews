@@ -5,10 +5,13 @@
    Поддерживаемая разметка content:
    *курсив*
    **жирный**
-   #текст#                -> копируемый моно-фрагмент
-   \"Цитата\"             -> цитата
-   %(a/b) (c/d)%          -> таблица
-   [[img:logo.png|тест]]       -> картинка внутри полного поста
+   #текст#                         -> копируемый моно-фрагмент
+   "Цитата"                       -> цитата
+   %(a/b) (c/d)%                  -> таблица
+   [[img:logo.png|тест]]          -> одна картинка
+   [[img:logo.png;logo2.png|тест]] -> от 1 до 3 картинок
+   [[img:logo.png|тест|50]]       -> ширина картинки в процентах
+   @текст (https://example.com)@   -> ссылка
    ========================================= */
 
 const POSTS = [
@@ -17,7 +20,7 @@ const POSTS = [
     title: "Тест",
     description: "Шрифты",
     image: "png/example-1.png",
-    content: "Шрифты:\n\n*Курсивный*\n\n**Жирный**\n\n#Моно#\n\n \"Цитата\" \n\nТаблица\n %(столбик1/столбик2) (тест/тест)%\n\n[[img:png/example-4.png|Упоминание картинки]]",
+    content: "Шрифты:\n\n*Курсивный*\n\n**Жирный**\n\n#Моно#\n\n \"Цитата\" \n\nТаблица\n %(столбик1/столбик2) (тест/тест)%\n\n@Открыть example.com (https://example.com)@\n\n[[img:png/example-4.png|Упоминание картинки|100]]",
     tags: ["#новости", "#обновление", "#битва"]
   },
   {
@@ -25,13 +28,14 @@ const POSTS = [
     title: "Новые награды за прогресс",
     description: "Разбираем новую систему наград и показываем, как будет меняться ценность призов по мере прогресса.",
     image: "png/example-2.png",
-    content: "В новой системе наград появятся несколько ступеней. *Чем выше прогресс, тем ценнее награда*.\n\n%(Уровень/Награда) (1/Монеты) (2/Очки силы) (3/Блинги) (4/Скин)%\n\n**Пример:** максимальная награда открывается только после большого количества очков.\n\n[[img:png/example-4.png|Пример экрана наград]]",
+    content: "В новой системе наград появятся несколько ступеней. *Чем выше прогресс, тем ценнее награда*.\n\n%(Уровень/Награда) (1/Монеты) (2/Очки силы) (3/Блинги) (4/Скин)%\n\n**Пример:** максимальная награда открывается только после большого количества очков.\n\n[[img:png/example-4.png;png/example-5.png|Примеры экранов|50]]",
     tags: ["#награды", "#прогресс", "#новости"]
   }
 ];
 
 const elements = {
   root: document.documentElement,
+  body: document.body,
   feedView: document.getElementById("feedView"),
   postView: document.getElementById("postView"),
   postDetail: document.getElementById("postDetail"),
@@ -44,11 +48,15 @@ const elements = {
   searchForm: document.getElementById("searchForm"),
   themeToggle: document.getElementById("themeToggle"),
   themeIcon: document.getElementById("themeIcon"),
-  toast: document.getElementById("toast")
+  toast: document.getElementById("toast"),
+  imageModal: document.getElementById("imageModal"),
+  imageModalImage: document.getElementById("imageModalImage"),
+  imageModalClose: document.getElementById("imageModalClose")
 };
 
 let toastTimer = null;
 let copyFlashTimer = null;
+let modalPreviousOverflow = "";
 
 /* Экранируем текст перед вставкой в innerHTML. */
 function escapeHtml(value) {
@@ -60,9 +68,58 @@ function escapeHtml(value) {
     .replace(/'/g, "&#039;");
 }
 
+/* Разрешаем только безопасные URL для ссылок из пользовательской разметки. */
+function sanitizeUrl(value) {
+  const raw = String(value).trim();
+  try {
+    const url = new URL(raw, window.location.href);
+    if (["http:", "https:", "mailto:", "tel:"].includes(url.protocol)) {
+      return url.href;
+    }
+  } catch (error) {
+    // Некорректный URL просто превращаем в обычный текст.
+  }
+  return "";
+}
+
+function parseImageMarkup(source, stash) {
+  const parts = source
+    .split("|")
+    .map((part) => part.trim());
+
+  const rawSources = parts.shift() || "";
+  const caption = parts.shift() || "";
+  const rawWidth = parts.shift() || "100";
+
+  const sources = rawSources
+    .split(";")
+    .map((src) => src.trim())
+    .filter(Boolean)
+    .slice(0, 3);
+
+  if (!sources.length) return source;
+
+  const parsedWidth = Number(rawWidth);
+  const width = Number.isFinite(parsedWidth)
+    ? Math.min(100, Math.max(1, parsedWidth))
+    : 100;
+
+  const safeCaption = escapeHtml(caption || "Изображение публикации");
+  const imagesHtml = sources
+    .map((src) => {
+      const safeSrc = escapeHtml(src);
+      return `<button class="inside-image__item" type="button" aria-label="Открыть изображение"><img src="${safeSrc}" alt="${safeCaption}" loading="lazy" data-lightbox-src="${safeSrc}"></button>`;
+    })
+    .join("");
+
+  return stash(
+    `<figure class="inside-image" style="--inside-image-width:${width}%"><div class="inside-image__grid">${imagesHtml}</div><figcaption>${safeCaption}</figcaption></figure>`
+  );
+}
+
 /*
   Разбирает мини-разметку.
-  Порядок: таблицы → изображения → цитаты → жирный → курсив → моно.
+  Порядок: таблицы → изображения → ссылки → цитаты → жирный → курсив → моно.
   Готовые HTML-фрагменты временно прячутся в токены, чтобы последующие
   регулярные выражения не ломали уже созданный HTML.
 */
@@ -80,54 +137,62 @@ function parseMiniMarkup(source, options = {}) {
     return `\uE000TOKEN_${index}\uE001`;
   };
 
-// Таблицы: %(Заголовок 1/Заголовок 2/...) (Ячейка 1/Ячейка 2/...)%
-html = html.replace(/%((?:\([^\n%]*\))+)%/g, (full, pairsText) => {
-  const pairRegex = /\(([^)\n]*)\)/g;
-  const rows = [];
-  let match;
+  // Таблицы: %(Заголовок 1/Заголовок 2/...) (Ячейка 1/Ячейка 2/...)%
+  html = html.replace(/%((?:\([^\n%]*\))+)%/g, (full, pairsText) => {
+    const pairRegex = /\(([^)\n]*)\)/g;
+    const rows = [];
+    let match;
 
-  while ((match = pairRegex.exec(pairsText)) !== null) {
-    const cells = match[1].split('/').map((cell) => cell.trim());
-    if (cells.length) rows.push(cells);
-  }
+    while ((match = pairRegex.exec(pairsText)) !== null) {
+      const cells = match[1].split("/").map((cell) => cell.trim());
+      if (cells.length) rows.push(cells);
+    }
 
-  if (!rows.length) return full;
+    if (!rows.length) return full;
 
-  const columnCount = Math.max(...rows.map((row) => row.length));
-  const [header, ...body] = rows;
+    const columnCount = Math.max(...rows.map((row) => row.length));
+    const [header, ...body] = rows;
 
-  const normalizeRow = (cells) => {
-    const result = cells.slice(0, columnCount);
-    while (result.length < columnCount) result.push("");
-    return result;
-  };
+    const normalizeRow = (cells) => {
+      const result = cells.slice(0, columnCount);
+      while (result.length < columnCount) result.push("");
+      return result;
+    };
 
-  const headerHtml = normalizeRow(header)
-    .map((cell) => `<th>${cell}</th>`)
-    .join("");
+    const headerHtml = normalizeRow(header)
+      .map((cell) => `<th>${cell}</th>`)
+      .join("");
 
-  const bodyHtml = body.length
-    ? `<tbody>${body
-        .map((row) => `<tr>${normalizeRow(row).map((cell) => `<td>${cell}</td>`).join("")}</tr>`)
-        .join("")}</tbody>`
-    : "";
+    const bodyHtml = body.length
+      ? `<tbody>${body
+          .map((row) => `<tr>${normalizeRow(row).map((cell) => `<td>${cell}</td>`).join("")}</tr>`)
+          .join("")}</tbody>`
+      : "";
 
-  return stash(
-    `<div class="table-wrap"><table><thead><tr>${headerHtml}</tr></thead>${bodyHtml}</table></div>`
-  );
-});
+    return stash(
+      `<div class="table-wrap"><table><thead><tr>${headerHtml}</tr></thead>${bodyHtml}</table></div>`
+    );
+  });
 
-  // Изображение внутри полного поста:
+  // Изображения внутри полного поста:
   // [[img:png/example.png|Описание]]
+  // [[img:png/a.png;png/b.png;png/c.png|Описание|50]]
   if (allowImages) {
-    html = html.replace(/\[\[img:([^|\]\n]+)\|([^\]\n]*)\]\]/g, (_, src, alt) => {
-      const safeSrc = escapeHtml(src.trim());
-      const safeAlt = escapeHtml(alt.trim() || "Изображение публикации");
-      return stash(
-        `<figure class="inside-image"><img src="${safeSrc}" alt="${safeAlt}" loading="lazy"><figcaption>${safeAlt}</figcaption></figure>`
-      );
-    });
+    html = html.replace(/\[\[img:([^\]\n]+)\]\]/g, (_, payload) => parseImageMarkup(payload, stash));
   }
+
+  // Ссылки:
+  // @текст (https://example.com)@
+  // \@текст\ (https://example.com)@
+  html = html.replace(/\\?@([^@\n]+?)\s*\(([^)\n]+)\)@/g, (full, text, href) => {
+    const safeHref = sanitizeUrl(href);
+    if (!safeHref) return full;
+
+    const safeText = text.trim().replace(/\\$/g, "").trim();
+    return stash(
+      `<a class="inline-link" href="${escapeHtml(safeHref)}" target="_blank" rel="noopener noreferrer">${escapeHtml(safeText)}</a>`
+    );
+  });
 
   // Цитаты. Внутри цитаты запускаем этот же парсер повторно,
   // поэтому комбинации **жирного**, *курсива* и #моно# работают.
@@ -164,8 +229,6 @@ html = html.replace(/%((?:\([^\n%]*\))+)%/g, (full, pairsText) => {
 }
 
 function restoreTokens(html, tokens) {
-  // Повторяем восстановление, пока токены ещё встречаются.
-  // Это нужно для вложенной разметки внутри цитат.
   let result = html;
   let guard = 0;
 
@@ -184,6 +247,7 @@ function normalizeSearch(value) {
 function getSearchableText(post) {
   return [
     post.title,
+    post.description,
     post.content,
     ...(Array.isArray(post.tags) ? post.tags : [])
   ].join(" ").toLocaleLowerCase("ru-RU");
@@ -229,7 +293,6 @@ function createPostCard(post) {
   title.className = "post-card__title";
   title.textContent = post.title;
   heading.appendChild(title);
-
   body.appendChild(heading);
 
   if (post.description) {
@@ -238,12 +301,6 @@ function createPostCard(post) {
     description.textContent = post.description;
     body.appendChild(description);
   }
-
-  // ❌ УДАЛИТЕ ЭТОТ БЛОК — он и выводит content на карточке
-  // const content = document.createElement("div");
-  // content.className = "post-card__content";
-  // content.innerHTML = parseMiniMarkup(post.content, { allowImages: false });
-  // body.appendChild(content);
 
   const tags = document.createElement("div");
   tags.className = "post-card__tags";
@@ -287,7 +344,6 @@ function createPostCard(post) {
     });
   });
 
-  // bindCopyableElements(content); // ❌ тоже удалите, т.к. content больше нет
   return article;
 }
 
@@ -317,16 +373,12 @@ function getPostWord(count) {
 function renderPost(post) {
   elements.postDetail.replaceChildren();
 
-  if (post.image) {
-    elements.postDetail.appendChild(makeImage(post.image, post.title, "post-detail__hero"));
-  }
-
+  // Обложка карточки специально не показывается в полном посте.
   const body = document.createElement("div");
   body.className = "post-detail__body";
 
   const heading = document.createElement("div");
   heading.className = "post-detail__heading";
-
 
   const title = document.createElement("h1");
   title.className = "post-detail__title";
@@ -334,6 +386,13 @@ function renderPost(post) {
   title.textContent = post.title;
   heading.appendChild(title);
   body.appendChild(heading);
+
+  if (post.description) {
+    const description = document.createElement("p");
+    description.className = "post-detail__description";
+    description.textContent = post.description;
+    body.appendChild(description);
+  }
 
   const content = document.createElement("div");
   content.className = "post-detail__content";
@@ -369,6 +428,11 @@ function renderPost(post) {
   });
 
   bindCopyableElements(content);
+  bindLightboxElements(content);
+}
+
+function setPostMode(active) {
+  elements.body.classList.toggle("post-mode", active);
 }
 
 function openPost(postId, replace = false) {
@@ -381,8 +445,9 @@ function openPost(postId, replace = false) {
   renderPost(post);
   elements.feedView.hidden = true;
   elements.postView.hidden = false;
+  setPostMode(true);
   document.title = `${post.title} | Битва Старр`;
-  window.scrollTo({ top: 0, behavior: "smooth" });
+  window.scrollTo({ top: 0, behavior: "auto" });
 
   const hash = `#post-${post.id}`;
   if (replace) {
@@ -395,6 +460,7 @@ function openPost(postId, replace = false) {
 function showFeed(updateUrl = true) {
   elements.postView.hidden = true;
   elements.feedView.hidden = false;
+  setPostMode(false);
   document.title = "Битва Старр | Новости";
 
   if (updateUrl && window.location.hash) {
@@ -474,6 +540,45 @@ async function copyText(text) {
   return result;
 }
 
+/* ---------- Полноэкранный просмотр изображений ---------- */
+function bindLightboxElements(container) {
+  container.querySelectorAll(".inside-image__item").forEach((button) => {
+    const image = button.querySelector("img[data-lightbox-src]");
+    if (!image) return;
+
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      openImageModal(image.dataset.lightboxSrc || image.src, image.alt);
+    });
+  });
+}
+
+function openImageModal(src, alt = "Изображение") {
+  if (!src) return;
+
+  elements.imageModalImage.src = src;
+  elements.imageModalImage.alt = alt;
+  elements.imageModal.hidden = false;
+  modalPreviousOverflow = elements.body.style.overflow;
+  elements.body.style.overflow = "hidden";
+  requestAnimationFrame(() => elements.imageModal.classList.add("is-visible"));
+  elements.imageModalClose.focus();
+}
+
+function closeImageModal() {
+  if (elements.imageModal.hidden) return;
+
+  elements.imageModal.classList.remove("is-visible");
+  elements.body.style.overflow = modalPreviousOverflow;
+
+  setTimeout(() => {
+    if (!elements.imageModal.classList.contains("is-visible")) {
+      elements.imageModal.hidden = true;
+      elements.imageModalImage.removeAttribute("src");
+    }
+  }, 180);
+}
+
 /* ---------- Уведомление ---------- */
 function showToast(message) {
   clearTimeout(toastTimer);
@@ -538,7 +643,17 @@ elements.themeToggle.addEventListener("click", () => {
 elements.backButton.addEventListener("click", () => {
   showFeed();
   renderPosts();
-  window.scrollTo({ top: 0, behavior: "smooth" });
+  window.scrollTo({ top: 0, behavior: "auto" });
+});
+
+elements.imageModalClose.addEventListener("click", closeImageModal);
+elements.imageModal.addEventListener("click", (event) => {
+  if (event.target === elements.imageModal) closeImageModal();
+});
+window.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && !elements.imageModal.hidden) {
+    closeImageModal();
+  }
 });
 
 window.addEventListener("popstate", handleHash);
