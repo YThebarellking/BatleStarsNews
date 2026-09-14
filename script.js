@@ -44,14 +44,16 @@ const POSTS = [
     id: 1,
     title: "Тест",
     description: "Шрифты",
+    ispin: true,
     image: "png/example-1.png",
-    content: "Шрифты:\n\n*Курсивный*\n\n**Жирный**\n\n#Моно#\n\n \"Цитата\" \n\nТаблица\n %(столбик1/столбик2) (тест/тест)%\n\n@Открыть example.com (https://example.com)@\n\n[[img:png/logo.png|Упоминание картинки|50]]",
+    content: "Шрифты:\n\n*Курсивный*\n\n**Жирный**\n\n#Моно#\n\n \"Цитата\" \n\nТаблица\n %(столбик1/столбик2) (тест/тест)%\n\n@Открыть example.com (https://example.com)@\n\n[[img:png/logo.png|Упоминание картинки|25]]",
     tags: ["#новости", "#обновление", "#битва"]
   },
   {
     id: 2,
     title: "Новые награды за прогресс",
     description: "Разбираем новую систему наград и показываем, как будет меняться ценность призов по мере прогресса.",
+    ispin: false,
     image: "png/example-2.png",
     content: "В новой системе наград появятся несколько ступеней. *Чем выше прогресс, тем ценнее награда*.\n\n%(Уровень/Награда) (1/Монеты) (2/Очки силы) (3/Блинги) (4/Скин)%\n\n**Пример:** максимальная награда открывается только после большого количества очков.\n\n[[img:png/example-4.png;png/example-5.png|Примеры экранов|50]]",
     tags: ["#награды", "#прогресс", "#новости"]
@@ -281,8 +283,11 @@ function getSearchableText(post) {
 
 function getFilteredPosts(query) {
   const normalized = normalizeSearch(query);
-  if (!normalized) return POSTS;
-  return POSTS.filter((post) => getSearchableText(post).includes(normalized));
+  const source = normalized
+    ? POSTS.filter((post) => getSearchableText(post).includes(normalized))
+    : POSTS.slice();
+
+  return source.sort((a, b) => Number(Boolean(b.ispin)) - Number(Boolean(a.ispin)));
 }
 
 function makeImage(src, alt, className) {
@@ -322,6 +327,14 @@ function createPostCard(post) {
   title.className = "post-card__title";
   title.textContent = post.title;
   heading.appendChild(title);
+
+  if (post.ispin) {
+    const pin = document.createElement("span");
+    pin.className = "post-card__pin";
+    pin.textContent = "Закреплено";
+    pin.title = "Закреплённый пост";
+    heading.appendChild(pin);
+  }
   body.appendChild(heading);
 
   if (post.description) {
@@ -386,7 +399,11 @@ function renderPosts() {
   if (!filtered.length) return;
 
   const fragment = document.createDocumentFragment();
-  filtered.forEach((post) => fragment.appendChild(createPostCard(post)));
+  filtered.forEach((post, index) => {
+    const card = createPostCard(post);
+    card.style.setProperty("--card-index", String(index));
+    fragment.appendChild(card);
+  });
   elements.posts.appendChild(fragment);
 }
 
