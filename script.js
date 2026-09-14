@@ -14,13 +14,38 @@
    @текст (https://example.com)@   -> ссылка
    ========================================= */
 
+const SCRIPT_BASE_URL = (() => {
+  const currentScript = document.currentScript;
+  return currentScript?.src ? new URL("./", currentScript.src) : new URL("./", document.baseURI);
+})();
+
+/*
+  Преобразует путь к ресурсу относительно самого script.js.
+  Это важно для GitHub Pages, где сайт может находиться в подпапке
+  вида https://username.github.io/repository/.
+*/
+function resolveAssetUrl(source) {
+  const value = String(source ?? "").trim();
+  if (!value) return "";
+
+  if (/^(?:https?:|mailto:|tel:|data:|blob:|#)/i.test(value)) {
+    return value;
+  }
+
+  try {
+    return new URL(value.replace(/^\.\//, ""), SCRIPT_BASE_URL).href;
+  } catch (error) {
+    return value;
+  }
+}
+
 const POSTS = [
   {
     id: 1,
     title: "Тест",
     description: "Шрифты",
     image: "png/example-1.png",
-    content: "Шрифты:\n\n*Курсивный*\n\n**Жирный**\n\n#Моно#\n\n \"Цитата\" \n\nТаблица\n %(столбик1/столбик2) (тест/тест)%\n\n@ссылка (https://example.com)@\n\n[[img:png/example.png|Упоминание картинки|50]]",
+    content: "Шрифты:\n\n*Курсивный*\n\n**Жирный**\n\n#Моно#\n\n \"Цитата\" \n\nТаблица\n %(столбик1/столбик2) (тест/тест)%\n\n@Открыть example.com (https://example.com)@\n\n[[img:png/logo.png|Упоминание картинки|50]]",
     tags: ["#новости", "#обновление", "#битва"]
   },
   {
@@ -28,7 +53,7 @@ const POSTS = [
     title: "Новые награды за прогресс",
     description: "Разбираем новую систему наград и показываем, как будет меняться ценность призов по мере прогресса.",
     image: "png/example-2.png",
-    content: "В новой системе наград появятся несколько ступеней. *Чем выше прогресс, тем ценнее награда*.\n\n%(Уровень/Награда) (1/Монеты) (2/Очки силы) (3/Блинги) (4/Скин)%\n\n**Пример:** максимальная награда открывается только после большого количества очков.\n\n[[img:png/logo.png;png/example-5.png|Примеры экранов|50]]",
+    content: "В новой системе наград появятся несколько ступеней. *Чем выше прогресс, тем ценнее награда*.\n\n%(Уровень/Награда) (1/Монеты) (2/Очки силы) (3/Блинги) (4/Скин)%\n\n**Пример:** максимальная награда открывается только после большого количества очков.\n\n[[img:png/example-4.png;png/example-5.png|Примеры экранов|50]]",
     tags: ["#награды", "#прогресс", "#новости"]
   }
 ];
@@ -107,7 +132,8 @@ function parseImageMarkup(source, stash) {
   const safeCaption = escapeHtml(caption || "Изображение публикации");
   const imagesHtml = sources
     .map((src) => {
-      const safeSrc = escapeHtml(src);
+      const resolvedSrc = resolveAssetUrl(src);
+      const safeSrc = escapeHtml(resolvedSrc);
       return `<button class="inside-image__item" type="button" aria-label="Открыть изображение"><img src="${safeSrc}" alt="${safeCaption}" loading="lazy" data-lightbox-src="${safeSrc}"></button>`;
     })
     .join("");
@@ -261,12 +287,15 @@ function getFilteredPosts(query) {
 
 function makeImage(src, alt, className) {
   const img = document.createElement("img");
-  img.src = src;
+  img.src = resolveAssetUrl(src);
   img.alt = alt || "";
   if (className) img.className = className;
+
   img.addEventListener("error", () => {
-    img.remove();
+    img.classList.add("is-broken");
+    img.alt = alt ? `Не удалось загрузить: ${alt}` : "Не удалось загрузить изображение";
   });
+
   return img;
 }
 
@@ -556,7 +585,7 @@ function bindLightboxElements(container) {
 function openImageModal(src, alt = "Изображение") {
   if (!src) return;
 
-  elements.imageModalImage.src = src;
+  elements.imageModalImage.src = resolveAssetUrl(src);
   elements.imageModalImage.alt = alt;
   elements.imageModal.hidden = false;
   modalPreviousOverflow = elements.body.style.overflow;
